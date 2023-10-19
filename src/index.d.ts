@@ -59,6 +59,7 @@ export interface MessageOptions {
   duration?: number;
   floating?: boolean;
   hideOnPress?: boolean;
+  hideOnSwipe?: boolean;
   hideStatusBar?: boolean;
   statusBarHeight?: number;
   icon?: React.ReactElement | React.FC | Icon;
@@ -74,6 +75,7 @@ export interface MessageOptions {
   onHide?(): void;
   onPress?(): void;
   onLongPress?(): void;
+  onSwipe?(): void;
   renderFlashMessageIcon?(
     icon: React.ReactElement | Icon,
     style: StyleProp<ImageStyle>,
