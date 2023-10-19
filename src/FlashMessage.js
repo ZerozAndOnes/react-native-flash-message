@@ -301,6 +301,10 @@ export default class FlashMessage extends Component {
      */
     hideOnPress: true,
     /**
+     * Controls if the flash message can be closed on swipe
+     */
+    hideOnSwipe: false,
+    /**
      * `onPress` callback for flash message press
      */
     onPress: noop,
@@ -308,6 +312,10 @@ export default class FlashMessage extends Component {
      * `onLongPress` callback for flash message long press
      */
     onLongPress: noop,
+    /**
+     * `onSwipe` callback for flash message swipe
+     */
+    onSwipe: noop,
     /**
      * Controls if the flash message will be shown with animation or not
      */
@@ -378,10 +386,12 @@ export default class FlashMessage extends Component {
   static propTypes = {
     canRegisterAsDefault: PropTypes.bool,
     hideOnPress: PropTypes.bool,
+    hideOnSwipe: PropTypes.bool,
     onShow: PropTypes.func,
     onHide: PropTypes.func,
     onPress: PropTypes.func,
     onLongPress: PropTypes.func,
+    onSwipe: PropTypes.func,
     animated: PropTypes.bool,
     animationDuration: PropTypes.number,
     duration: PropTypes.number,
@@ -413,11 +423,18 @@ export default class FlashMessage extends Component {
     super(props);
 
     this.prop = this.prop.bind(this);
+    this.shouldRespondToPress = this.shouldRespondToPress.bind(this);
+    this.getSwipeSettings = this.getSwipeSettings.bind(this);
+    this.swipeMessage = this.swipeMessage.bind(this);
+    this.isSwipeMovement = this.isSwipeMovement.bind(this);
     this.pressMessage = this.pressMessage.bind(this);
     this.longPressMessage = this.longPressMessage.bind(this);
+    this.pressInMessage = this.pressInMessage.bind(this);
+    this.pressOutMessage = this.pressOutMessage.bind(this);
     this.toggleVisibility = this.toggleVisibility.bind(this);
     if (!this._id) this._id = srid();
-
+    this.isSwipe = false;
+    
     this.state = {
       visibleValue: new Animated.Value(0),
       isHidding: false,
@@ -452,8 +469,59 @@ export default class FlashMessage extends Component {
   /**
    * Non-public method
    */
+  shouldRespondToPress() {
+    return !this.state.isHidding && !this.isSwipe;
+  }
+  /**
+   * Non-public method
+   */
+  getSwipeSettings() {
+    const { message } = this.state;
+    const hideOnSwipe = this.prop(message, "hideOnSwipe");
+    const onSwipe = this.prop(message, "onSwipe");
+    const isOnSwipeAFunction = typeof onSwipe === "function";
+    return {
+      respond: hideOnSwipe || isOnSwipeAFunction,
+      hideOnSwipe,
+      onSwipe,
+      isOnSwipeAFunction,
+    }
+  }
+  /**
+   * Non-public method
+   */
+  swipeMessage(event) {
+    const { respond, hideOnSwipe, onSwipe, isOnSwipeAFunction } = this.getSwipeSettings();
+    const { message } = this.state;
+
+    if(respond) {
+      this.isSwipe = true;
+
+      if(hideOnSwipe) {
+        this.hideMessage();
+      }
+
+      if (isOnSwipeAFunction) {
+        onSwipe(event, message);
+      }
+    }
+  }
+  /**
+   * Non-public method
+   */
+  isSwipeMovement(previousPosition, currentPosition) {
+    const swipeOffset = 20;
+    /**
+     * If previousPosition or currentPosition is undefined, Math.abs will be NaN and 
+     * NaN > swipeOffset will be false
+     */
+    return Math.abs(previousPosition - currentPosition) > swipeOffset;
+  }
+  /**
+   * Non-public method
+   */
   pressMessage(event) {
-    if (!this.state.isHidding) {
+    if (this.shouldRespondToPress()) {
       const { message } = this.state;
       const hideOnPress = this.prop(message, "hideOnPress");
       const onPress = this.prop(message, "onPress");
@@ -471,7 +539,7 @@ export default class FlashMessage extends Component {
    * Non-public method
    */
   longPressMessage(event) {
-    if (!this.state.isHidding) {
+    if (this.shouldRespondToPress()) {
       const { message } = this.state;
       const hideOnPress = this.prop(message, "hideOnPress");
       const onLongPress = this.prop(message, "onLongPress");
@@ -482,6 +550,29 @@ export default class FlashMessage extends Component {
 
       if (typeof onLongPress === "function") {
         onLongPress(event, message);
+      }
+    }
+  }
+  /**
+   * Non-public method
+   */
+  pressInMessage(event) {
+    if(this.getSwipeSettings().respond) {
+      this.isSwipe = false;
+      this.touchX = event.nativeEvent.pageX;
+      this.touchY = event.nativeEvent.pageY;
+    }
+  }
+  /**
+   * Non-public method
+   */
+  pressOutMessage(event) {
+    if(this.getSwipeSettings().respond) {
+      const isHorizontalSwipe = this.isSwipeMovement(this.touchX, event.nativeEvent.pageX);
+      const isVerticalSwipe = this.isSwipeMovement(this.touchY, event.nativeEvent.pageY);
+  
+      if (isHorizontalSwipe || isVerticalSwipe) {
+        this.swipeMessage(event);
       }
     }
   }
@@ -602,7 +693,7 @@ export default class FlashMessage extends Component {
   render() {
     const { message, visibleValue } = this.state;
 
-    const { MessageComponent, testID, accessible, accessibilityLabel, ...otherProps } = this.props;
+    const { MessageComponent, testID, accessible, accessibilityLabel, onSwipe, ...otherProps } = this.props;
     const renderBeforeContent = this.prop(message, "renderBeforeContent");
     const renderCustomContent = this.prop(message, "renderCustomContent");
     const renderAfterContent = this.prop(message, "renderAfterContent");
@@ -625,7 +716,13 @@ export default class FlashMessage extends Component {
     return (
       <Animated.View pointerEvents="box-none" style={[positionStyle(styles.root, position), animStyle]}>
         {!!message && (
-          <TouchableWithoutFeedback onPress={this.pressMessage} onLongPress={this.longPressMessage} accessible={false}>
+          <TouchableWithoutFeedback 
+            onPress={this.pressMessage} 
+            onLongPress={this.longPressMessage}
+            onPressIn={this.pressInMessage}
+            onPressOut={this.pressOutMessage}
+            accessible={false} 
+          >
             <MessageComponent
               position={position}
               floating={floating}
